@@ -1,0 +1,154 @@
+---
+title: "Example Medical Statistics Work"
+author: "George Melrose"
+date: "19/07/2022"
+output:
+  ioslides_presentation:
+    widescreen: true 
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = FALSE)
+library(readr)
+library(lubridate)
+library(dygraphs)
+library(xts)   
+library(lubridate)
+library(ggplot2)
+library(hrbrthemes)
+library(finalfit)
+library(MASS)
+library(survival)
+library(survminer)
+library(cmprsk)
+library(ggplot2)
+library(tidyr)
+#library(tidyverse)
+library(dynutils)
+library(plotly)
+library(dplyr)
+library(patchwork)
+library(scales)
+library(viridis)
+library(zoo)
+library(plyr)
+library(purrr)
+```
+
+
+##  {.flexbox .vcenter}
+
+```{r,include = FALSE,warning=FALSE,echo=FALSE}
+
+data(Melanoma, package = "MASS")
+
+ci_ulcer <-
+  cuminc(
+    ftime = Melanoma$time,
+    fstatus = Melanoma$status,
+    group = Melanoma$ulcer,
+    cencode = 2
+    )
+
+ciplotdat <-
+  ci_ulcer %>%
+  list_modify("Tests" = NULL) %>%
+  map_df(`[`, c("time", "est"), .id = "id") %>%
+  mutate(id = recode(
+    id,
+    "0 1" = "Not ulcerated:Death melanoma",
+    "0 3" = "Not ulcerated:Death other causes",
+    "1 1" = "Ulcerated:Death melanoma",
+    "1 3" = "Ulcerated:Death other causes")
+    ) %>%
+  separate(id, c("Ulceration", "Event"), ":")
+```
+
+
+```{r, fig.height = 5.5, fig.width = 7.5, fig.cap="Cumulative Incidence Plot of Anderson et al. (1993) Patients Deaths", warning=FALSE,echo=FALSE}
+p1 <- ggplot(ciplotdat, aes(x = time, y = est, color = Ulceration)) +
+  geom_step(lwd = 1.2, aes(linetype = Event))  +
+  ylim(c(0, 1)) +
+  theme_classic() +
+  theme(plot.title = element_text(size = 14),
+        legend.title = element_blank(),
+        legend.position = "bottom") +
+  labs(x = "Days",
+       y = "Cumulative incidence",
+       title = "Death by ulceration status") +
+  annotate("text", x = 1500, y = 1, hjust = 0,
+           label = paste0(
+             "Death melanoma p = ",
+             ifelse(ci_ulcer$Tests[1, 2] < .001,
+                    "<.001",
+                    round(ci_ulcer$Tests[1, 2], 3)))) +
+  annotate("text", x = 1500, y = 0.92, hjust = 0,
+           label = paste0(
+             "Death other causes p = ",
+             ifelse(ci_ulcer$Tests[2, 2] < .001,
+                    "<.001",
+                    round(ci_ulcer$Tests[2, 2], 3))))
+
+mel_fit <- survfit(
+  Surv(time, ifelse(status != 2, 1, 0)) ~ ulcer,
+  data = Melanoma
+)
+
+num <- ggsurvplot(
+  fit = mel_fit,
+  risk.table = TRUE,
+  risk.table.y.text = FALSE,
+  ylab = "Days",
+  risk.table.fontsize = 3.2,
+  tables.theme = theme_survminer(font.main = 10),
+  title = "Test"
+  )
+
+cowplot::plot_grid(
+  p1,
+  num$table + theme_cleantable(),
+  nrow = 2,
+  rel_heights = c(4, 1),
+  align = "v",
+  axis = "b"
+  )
+
+```
+
+
+##  {.flexbox .vcenter}
+
+```{r, fig.height = 5.8, fig.width = 7.5, message = FALSE, fig.cap="Kaplan-Meier Plot of Anderson et al. (1993) Patients Deaths", warning=FALSE,echo=FALSE}
+#class(Melanoma$sex)
+
+Melanoma$sex <- as.factor(Melanoma$sex)
+
+Melanoma$sex <- recode(Melanoma$sex, "1" = "Male", "0" = "Female")
+
+Melanoma$status <- as.factor(Melanoma$status)
+
+Melanoma$status <- recode(Melanoma$status, "1" = "1", "2" = "0","3" = "0")
+
+#class(Melanoma$status)
+
+Melanoma$status <- as.numeric(Melanoma$status )
+
+fit = survfit(Surv(time, status) ~ sex, data = Melanoma)
+
+ggsurvplot(
+    fit, 
+    xlab = "Days", 
+    ylab = "Survival probability",
+    pval = TRUE,
+    ggtheme = theme_light(),
+    risk.table = TRUE,
+    risk.table.y.text.col = T,
+    risk.table.height = 0.2,
+    risk.table.y.text = FALSE,
+    surv.median.line = "hv",
+    conf.int = TRUE, legend.labs = c("Male","Female"),
+    cumcensor = TRUE, pval.method = TRUE, conf.int.style = "step"
+    )
+
+
+```
